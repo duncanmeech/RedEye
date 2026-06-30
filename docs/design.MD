@@ -1,6 +1,6 @@
 # RedEye — Design Document
 
-## 1. Purpose
+## 1. Purpose:
 
 **RedEye** is a small C# / .NET Windows Forms application that demonstrates an
 automated **red‑eye removal** algorithm for digital photographs. The visible
