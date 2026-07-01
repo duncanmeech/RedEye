@@ -2,6 +2,8 @@
 
 ## 1. Purpose:
 
+( currently being used to test doc generation with AI )
+
 **RedEye** is a small C# / .NET Windows Forms application that demonstrates an
 automated **red‑eye removal** algorithm for digital photographs. The visible
 program is a *test harness*: it loads a single embedded sample image
