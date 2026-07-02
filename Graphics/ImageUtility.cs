@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -28,8 +29,10 @@ namespace RedEye
 
 
         /// <summary>
-        /// max dimensions of images we can handle. We might do more but certain algorithms ( seed file )
-        /// use hard wired stacks with limits determined by these numbers.
+        /// Legacy soft limits on image size. Historically the recursive flood-fill in <see cref="BlobMap"/>
+        /// used hard-wired stacks sized around these constants; that is no longer the case (the fill
+        /// now uses an explicit generic stack whose memory grows with the size of the blob, not the
+        /// image). Kept for backward compatibility with any external caller that reads them.
         /// </summary>
         public static int kMAX_IMAGE_WIDTH = 2048;
 
@@ -2388,8 +2391,9 @@ namespace RedEye
         }
 
         /// <summary>
-        /// Used by certain of the recursive ( or tail end recursion removed ) algorithms that require to know if the element has
-        /// already been traversed.
+        /// Per-pixel traversal flag used by the iterative flood fill in <see cref="ColorIsland"/>
+        /// to avoid revisiting pixels within a single traversal. Reset with <see cref="ResetVisited"/>
+        /// at the start of any operation that colors islands.
         /// </summary>
         private bool[] visited;
 
@@ -2612,82 +2616,50 @@ namespace RedEye
         }
 
         /// <summary>
-        /// Stack used for tail-end recursion removal in ColorIsland
+        /// Stack used by the iterative flood fill in <see cref="ColorIsland"/>.
+        /// Generic <see cref="Point"/> stack avoids boxing on every push, and memory usage
+        /// grows with the size of the blob being filled rather than the size of the image.
         /// </summary>
-        private Stack colorIslandStack = new Stack();
+        private Stack<Point> colorIslandStack = new Stack<Point>();
 
         /// <summary>
-        /// Set all the pixels in the given island to the given color
+        /// Set all the pixels in the given island to the given color, using an iterative
+        /// 4-connected flood fill seeded by whatever is currently on <see cref="colorIslandStack"/>.
         /// </summary>
-        /// <param name="island"></param>
+        /// <param name="index"></param>
         /// <param name="c"></param>
+        /// <param name="b"></param>
         protected void ColorIsland(int index, Color c, Bitmap b)
         {
-
-            // iterate until stack empty
-
             while (this.colorIslandStack.Count > 0)
             {
-
-                // get top of stack
-
-                Point p = (Point)this.colorIslandStack.Pop();
+                Point p = this.colorIslandStack.Pop();
 
                 int x = p.X;
-
                 int y = p.Y;
 
-                // if out of bounds then bail
+                if (this.visited[y * this.width + x])
+                    continue;
 
-                if (x < 0)
-                    break;
+                if (this.map[y * this.width + x] != index)
+                    continue;
 
-                if (y < 0)
-                    break;
+                this.visited[y * this.width + x] = true;
 
-                if (x >= this.width)
-                    break;
+                b.SetPixel(x, y, c);
 
-                if (y >= this.height)
-                    break;
+                if (y > 0)
+                    this.colorIslandStack.Push(new Point(x, y - 1));
 
-                // continue if pixel not visited
+                if (x > 0)
+                    this.colorIslandStack.Push(new Point(x - 1, y));
 
-                if (this.visited[y * this.width + x] == false)
-                {
+                if (x < this.width - 1)
+                    this.colorIslandStack.Push(new Point(x + 1, y));
 
-                    // proceed if this pixel is the same as the given index
-
-                    if (this.map[y * this.width + x] == index)
-                    {
-
-                        // mark as visited
-
-                        this.visited[y * this.width + x] = true;
-
-                        // set pixel in bitmap
-
-                        b.SetPixel(x, y, c);
-
-                        // pop neighbors onto stack
-
-                        this.colorIslandStack.Push(new Point(x, y - 1));
-
-                        this.colorIslandStack.Push(new Point(x - 1, y));
-
-                        this.colorIslandStack.Push(new Point(x + 1, y));
-
-                        this.colorIslandStack.Push(new Point(x, y + 1));
-
-
-                    }
-
-                }
-
+                if (y < this.height - 1)
+                    this.colorIslandStack.Push(new Point(x, y + 1));
             }
-
-
-
         }
 
 
@@ -2733,81 +2705,57 @@ namespace RedEye
 
         }
 
-        // used to store the recursion stack for FindNeighbors
-
-        private Stack FindNeighborsStack = new Stack();
+        /// <summary>
+        /// Work stack for the iterative flood fill in <see cref="FindNeighbors"/>.
+        /// Generic <see cref="Point"/> stack avoids boxing on every push, and memory usage
+        /// grows with the size of the blob being discovered rather than the size of the image.
+        /// </summary>
+        private Stack<Point> FindNeighborsStack = new Stack<Point>();
 
 
         /// <summary>
-        /// Find all the unassigned neighbors of the given pixel and update stats of the given island
+        /// Find all unassigned 4-connected neighbors of the seed pixel(s) currently on
+        /// <see cref="FindNeighborsStack"/> and update stats of the given island.
+        /// Uses an explicit stack (iterative) rather than recursion so blob size is bounded
+        /// by heap memory rather than by the ~1MB per-thread CLR stack.
         /// </summary>
-        /// <param name="x"></param>
-        /// <param name="y"></param>
+        /// <param name="b"></param>
+        /// <param name="island"></param>
         protected void FindNeighbors(Bitmap b, BlobIsland island)
         {
-            // keep iterating while there are items on the stack
-
             while (this.FindNeighborsStack.Count > 0)
             {
-                // get top of stack
+                Point p = this.FindNeighborsStack.Pop();
 
-                Point p = (Point)this.FindNeighborsStack.Pop();
+                int x = p.X;
+                int y = p.Y;
 
-                // if out of bounds then ignore
+                if (this.map[y * this.width + x] != -1)
+                    continue;
 
-                if (p.X < 0)
-                    break;
+                Color pixel = b.GetPixel(x, y);
 
-                if (p.Y < 0)
-                    break;
+                if ((pixel.R + pixel.G + pixel.B) == 0)
+                    continue;
 
-                if (p.X >= this.width)
-                    break;
+                this.map[y * this.width + x] = island.index;
 
-                if (p.Y >= this.height)
-                    break;
+                island.pixelCount++;
 
-                // continue if this pixel is not assigned to an island
+                if ((x == 0) || (y == 0) || (x == this.width - 1) || (y == this.height - 1))
+                    island.edgeConnected = true;
 
-                if (this.map[p.Y * this.width + p.X] == -1)
-                {
+                if (y > 0)
+                    this.FindNeighborsStack.Push(new Point(x, y - 1));
 
-                    // continue only if the pixel is not black
+                if (x > 0)
+                    this.FindNeighborsStack.Push(new Point(x - 1, y));
 
-                    Color pixel = b.GetPixel(p.X, p.Y);
+                if (x < this.width - 1)
+                    this.FindNeighborsStack.Push(new Point(x + 1, y));
 
-                    // if any components not zero consider it a 'set' pixel
-
-                    if ((pixel.R + pixel.G + pixel.B) > 0)
-                    {
-
-                        // mark pixel with our index
-
-                        this.map[p.Y * this.width + p.X] = island.index;
-
-                        // bump pixel count
-
-                        island.pixelCount++;
-
-                        // if this is an edge pixel then flag island as belonging to an edge
-
-                        if ((p.X == 0) || (p.Y == 0) || (p.X == this.width - 1) || (p.Y == this.height - 1))
-                            island.edgeConnected = true;
-
-                        // push neighbors onto stack and keep trying
-
-                        this.FindNeighborsStack.Push(new Point(p.X, p.Y - 1));
-
-                        this.FindNeighborsStack.Push(new Point(p.X - 1, p.Y));
-
-                        this.FindNeighborsStack.Push(new Point(p.X + 1, p.Y));
-
-                        this.FindNeighborsStack.Push(new Point(p.X, p.Y + 1));
-
-                    }
-
-                }
-
+                if (y < this.height - 1)
+                    this.FindNeighborsStack.Push(new Point(x, y + 1));
             }
         }
     }
