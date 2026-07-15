@@ -171,7 +171,7 @@ namespace RedEye
 		/// There is the 'typical' red eye color recorded in CIE Lab color space;
 		/// </summary>
 		const double kL_REDEYE = 42;
-		const double kA_REDEYE = 58; // was 62
+		const double kA_REDEYE = 55; // was 62
 		const double kB_REDEYE = 30;
 
 		/// <summary>
