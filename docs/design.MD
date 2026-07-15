@@ -114,7 +114,7 @@ A canonical "typical red‑eye" reference color is hard‑coded:
 
 ```csharp
 const double kL_REDEYE = 42;
-const double kA_REDEYE = 58;
+const double kA_REDEYE = 55;
 const double kB_REDEYE = 30;
 ```
 
@@ -259,7 +259,7 @@ calling out for anyone planning to productize it:
   `Span<byte>`) is the obvious first optimization.
 - **Hard‑coded thresholds.** The threshold (`175`), Gaussian parameters
   (`size=3, sigma=15`), and reference red‑eye color
-  (`L*=42, a*=58, b*=30`) are constants in `RedEyeTool.cs`. Exposing them as
+  (`L*=42, a*=55, b*=30`) are constants in `RedEyeTool.cs`. Exposing them as
   parameters would let callers tune for skin tone, lighting, or different
   flash conditions.
 - **Silent failure on exceptions.** `ProcessImage` wraps the whole pipeline in
