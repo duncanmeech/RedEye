@@ -114,7 +114,7 @@ A canonical "typical red‑eye" reference color is hard‑coded:
 
 ```csharp
 const double kL_REDEYE = 42;
-const double kA_REDEYE = 50;
+const double kA_REDEYE = 53;
 const double kB_REDEYE = 30;
 ```
 
@@ -191,8 +191,10 @@ their own right). Highlights:
   background), and maintains a list of islands with their seed location, pixel
   count, and edge‑connectedness. Used by the red‑eye pipeline for noise
   removal (`RemoveIslands`), false‑coloring (`ColorIslands`), and hole filling
-  (`FillHoles`). Hard limits of `2048 × 2048` are documented because some
-  internal algorithms use stack arrays sized to those constants.
+  (`FillHoles`). Flood fill uses an iterative `Stack<Point>` implementation,
+  so the pipeline has no enforced image-size cap. Until they are removed,
+  `ImageUtility.kMAX_IMAGE_WIDTH` and `kMAX_IMAGE_HEIGHT` remain legacy
+  compatibility values that the pipeline does not consult.
 
 ### 4.2 `RgbaHls` (`Graphics/RgbaHls.cs`)
 
@@ -259,16 +261,17 @@ calling out for anyone planning to productize it:
   `Span<byte>`) is the obvious first optimization.
 - **Hard‑coded thresholds.** The threshold (`175`), Gaussian parameters
   (`size=3, sigma=15`), and reference red‑eye color
-  (`L*=42, a*=50, b*=30`) are constants in `RedEyeTool.cs`. Exposing them as
+  (`L*=42, a*=53, b*=30`) are constants in `RedEyeTool.cs`. Exposing them as
   parameters would let callers tune for skin tone, lighting, or different
   flash conditions.
 - **Silent failure on exceptions.** `ProcessImage` wraps the whole pipeline in
   `try { … } catch (Exception) { }` and returns whatever `newImage` is at the
   point of failure (potentially `null`). Real usage should surface or log
   errors.
-- **Image size limit.** `BlobMap`'s recursive flood‑fill style algorithms cap
-  out at `2048 × 2048`. Larger inputs need either an iterative implementation
-  or down‑sampling.
+- **Image size and compatibility.** `BlobMap` uses iterative flood fill and
+  does not impose an image-size cap. The legacy
+  `ImageUtility.kMAX_IMAGE_WIDTH` and `kMAX_IMAGE_HEIGHT` compatibility values
+  can be removed once external callers no longer depend on them.
 - **.NET Framework 4.0 / WinForms only.** Porting to .NET 6+ and either WPF /
   WinUI / MAUI or a headless library (no `System.Drawing.Common` on
   non‑Windows) is straightforward but required for cross‑platform use.

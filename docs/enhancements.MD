@@ -35,8 +35,8 @@ For context, the properties that most influence this plan:
   - Per‑pixel color‑space math in `RgbaHls` returning `double` values,
     boxed through a heap‑allocated `CIELab` class
   - 2D convolution / Gaussian blur in `ImageUtility.Convolve`
-  - Recursive connected‑component flood‑fill in `BlobMap`, capped at
-    `2048 × 2048` because of stack‑sized arrays
+  - Iterative connected‑component flood‑fill in `BlobMap` using
+    `Stack<Point>`
 - **Error handling:** the whole pipeline is wrapped in
   `try { … } catch (Exception) { }` and silently returns a possibly‑`null`
   bitmap on failure.
@@ -421,37 +421,25 @@ budget improves meaningfully, expand.
 
 **Expected speedup:** 2×–8× on the vectorized functions.
 
-### 3.6 Iterative flood fill in `BlobMap`
+### 3.6 Retire legacy image-size constants
 
-**Where:** `BlobMap` in `Graphics/ImageUtility.cs`. The design doc calls
-out that "recursive flood‑fill style algorithms cap out at `2048 × 2048`"
-because of stack‑sized arrays.
+**Where:** `ImageUtility.kMAX_IMAGE_WIDTH` and
+`ImageUtility.kMAX_IMAGE_HEIGHT` in `Graphics/ImageUtility.cs`.
 
-**Why:** deep recursion on the CLR carries a fixed ~1 MB per‑thread stack
-budget, hence the size cap. It also inhibits parallelism (§3.4 across
-threads with big stacks is fine, but a recursive fill still can't be split
-across cores). And the stack‑sized arrays are wasted memory for small
-inputs.
+**Why:** `BlobMap` already uses an iterative `Stack<Point>` flood fill and
+does not consult these values. The public constants remain only as legacy
+compatibility surface for any external caller that reads them.
 
-**Change:** convert the recursive fill to an explicit queue/stack:
+**Change:** after confirming no external callers depend on them, remove the
+two constants:
 
 ```csharp
-var work = new Stack<(int x, int y)>();  // or Queue for BFS
-work.Push((seedX, seedY));
-while (work.Count > 0)
-{
-    var (x, y) = work.Pop();
-    // classic 4‑ or 8‑connected step, push neighbours
-}
+public static int kMAX_IMAGE_WIDTH = 2048;
+public static int kMAX_IMAGE_HEIGHT = 2048;
 ```
 
-With an explicit `Stack<(int,int)>` or a scanline flood‑fill, the
-`kMAX_IMAGE_WIDTH` / `kMAX_IMAGE_HEIGHT` limits (`2048 × 2048`) can be
-raised or removed entirely, and memory grows with the size of the *blob*,
-not the image.
-
-**Expected speedup:** modest on tiny images; the main win is enabling
-larger inputs and removing a class of `StackOverflowException` bugs.
+**Expected benefit:** a smaller public API with no behavior change to the
+red-eye pipeline.
 
 ### 3.7 Precompute lookup tables
 
@@ -548,7 +536,7 @@ commit:
 | 8 | Precompute sRGB LUTs (§3.7) | 6 | 0.5 day |
 | 9 | `Parallel.For` on outer loops (§3.4) | 6 | 0.5 day |
 | 10 | Fuse intermediates / drop `Bitmap` for masks (§3.3) | 6 | 1–2 days |
-| 11 | Iterative flood fill (§3.6) | — | 1 day |
+| 11 | Retire legacy image-size constants (§3.6) | — | 0.5 day |
 | 12 | SIMD hotspots (§3.5) | 5, 6 | 2–4 days |
 | 13 | Split into `RedEye.Imaging` library (§2.5) | 4 | 1 day |
 | 14 | Optional: ImageSharp / GPU (§2.5, §3.10) | 13 | multi‑day |

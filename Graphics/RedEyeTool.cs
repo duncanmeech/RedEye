@@ -141,7 +141,7 @@ namespace RedEye
 
 		/// <summary>
 		/// Return a bitmap that is a thresholded version of the given. The ultimate threashold value is a matter of
-		/// emperical testing. 175 is used.
+		/// emperical testing. 190 is used.
 		/// </summary>
 		/// <param name="s"></param>
 		/// <returns></returns>
@@ -151,7 +151,7 @@ namespace RedEye
 
 			Bitmap b = new Bitmap( s );
 
-			ImageUtility.ThresholdImage( b, 175.0f / 255.0f );
+			ImageUtility.ThresholdImage( b, 190.0f / 255.0f );
 
 			float[] kernel = ImageUtility.GetGaussianBlurKernel( 3, 15 );
 
