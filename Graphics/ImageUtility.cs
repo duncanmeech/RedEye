@@ -27,17 +27,6 @@ namespace RedEye
         /// </summary>
         public static Matrix IdentityMatrix = new Matrix();
 
-
-        /// <summary>
-        /// Legacy soft limits on image size. Historically the recursive flood-fill in <see cref="BlobMap"/>
-        /// used hard-wired stacks sized around these constants; that is no longer the case (the fill
-        /// now uses an explicit generic stack whose memory grows with the size of the blob, not the
-        /// image). Kept for backward compatibility with any external caller that reads them.
-        /// </summary>
-        public static int kMAX_IMAGE_WIDTH = 2048;
-
-        public static int kMAX_IMAGE_HEIGHT = 2048;
-
         /// <summary>
         /// acceptable ranges for gamma correction values
         /// </summary>
