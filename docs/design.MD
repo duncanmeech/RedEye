@@ -31,7 +31,8 @@ lifted into a larger photo‑editing application.
 ```
 +---------------------------------------------------------+
 |                       Program.cs                        |
-|         (STA entry point, runs Application loop)        |
+|  (STA entry point: runs WinForms demo, or writes a      |
+|   processed PNG when invoked with --output <path>)      |
 +---------------------------------------------------------+
                            |
                            v
@@ -61,7 +62,7 @@ lifted into a larger photo‑editing application.
 
 | Path | Role |
 | --- | --- |
-| `Program.cs` | Standard WinForms `Main` — enables visual styles and runs `MainForm`. |
+| `Program.cs` | STA entry point. Starts the WinForms demo by default. When invoked as `RedEye.exe --output <png-path>` it runs the pipeline headlessly against the embedded sample image and saves the result as a PNG, then exits without showing any UI. |
 | `MainForm.cs` / `MainForm.Designer.cs` / `MainForm.resx` | UI: two `PictureBox` controls and a static description label. |
 | `Properties/Resources.resx` (+ `.Designer.cs`) | Embeds `redeye.png` as the demo input. |
 | `Properties/AssemblyInfo.cs`, `Properties/Settings.*` | Standard generated project metadata. |
@@ -127,7 +128,7 @@ below, with a pointer to the function that implements it.
 | --- | --- | --- |
 | 1 | Convert RGB → CIE L\*a\*b\* per pixel; record min/max `L*`. | `GetCIELABImage` |
 | 2 | Compute a grayscale **redness mask** based on chromaticity distance from the reference red‑eye color. White = closest to red, black = farthest. | `GetMaskImage` → `GetChromaticityDistanceMap` |
-| 3 | Threshold the redness mask at `175/255` to produce a binary candidate map. | `Threshold` (uses `ImageUtility.ThresholdImage`) |
+| 3 | Threshold the redness mask at `190/255` to produce a binary candidate map. | `Threshold` (uses `ImageUtility.ThresholdImage`) |
 | 4 | Gaussian‑blur the binary map and re‑threshold to clean up noise / merge adjacent specks. | `Threshold` (second pass) |
 | 5 | Run connected‑component analysis on the binary map. | `BlobMap` constructor (`Graphics/ImageUtility.cs`) |
 | 6 | Drop blobs that don't meet the size criteria (small noise islands are removed). | `BlobMap.RemoveIslands` |
@@ -245,6 +246,26 @@ protected override void OnLoad(EventArgs e)
 There are no controls for opening other files, saving the result, or tuning
 parameters — those are left as integration points for a hosting application.
 
+### 5.1 Headless / command‑line mode
+
+`Program.Main` also supports a non‑interactive mode useful for scripting,
+batch testing, or CI golden‑image capture:
+
+```
+RedEye.exe --output <png-path>
+```
+
+When the two‑argument form is detected, the program:
+
+1. Loads the embedded `redeye.png` sample.
+2. Runs `RedEyeTool.ProcessImage` on it.
+3. Saves the result to `<png-path>` as a PNG file.
+4. Exits without opening any window.
+
+If `ProcessImage` returns `null` an `InvalidOperationException` is thrown
+and the process exits with a non‑zero code. Any other argument combination
+falls through to the normal WinForms startup.
+
 ---
 
 ## 6. Known Constraints & Extension Points
@@ -259,7 +280,7 @@ calling out for anyone planning to productize it:
   conversions and `GetNewImage`) use `Bitmap.GetPixel` / `SetPixel`, which is
   extremely slow on large images. Migrating to `LockBits` + pointer access (or
   `Span<byte>`) is the obvious first optimization.
-- **Hard‑coded thresholds.** The threshold (`175`), Gaussian parameters
+- **Hard‑coded thresholds.** The threshold (`190`), Gaussian parameters
   (`size=3, sigma=15`), and reference red‑eye color
   (`L*=42, a*=53, b*=30`) are constants in `RedEyeTool.cs`. Exposing them as
   parameters would let callers tune for skin tone, lighting, or different
@@ -281,6 +302,7 @@ calling out for anyone planning to productize it:
 ## 7. Quick Reference
 
 - **Entry point:** `Program.Main()` in `Program.cs`
+- **Headless output mode:** `RedEye.exe --output <png-path>`
 - **Algorithm entry point:** `RedEyeTool.ProcessImage(Bitmap)` in
   `Graphics/RedEyeTool.cs`
 - **Color math:** `RgbaHls.*` (static) in `Graphics/RgbaHls.cs`
